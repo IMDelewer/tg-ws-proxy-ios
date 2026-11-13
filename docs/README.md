@@ -44,7 +44,7 @@ Supports **iOS 16.0 – 27.0**.
 
 ### 1. Download the file
 
-From the [releases page](https://github.com/reekeer/tg-ws-proxy-ios/releases/latest), which also carries a full comparison:
+From the [releases page](https://github.com/IMDelewer/tg-ws-proxy-ios/releases/latest), which also carries a full comparison:
 
 | File | Who it is for |
 |------|---------------|
@@ -97,7 +97,7 @@ The signature never expires, which makes this the only method where the app does
 <summary><b>Xcode</b> — build and install it yourself, needs a Mac</summary>
 
 ```sh
-git clone --recurse-submodules https://github.com/reekeer/tg-ws-proxy-ios
+git clone --recurse-submodules https://github.com/IMDelewer/tg-ws-proxy-ios
 cd tg-ws-proxy-ios
 rustup target add aarch64-apple-ios
 open TgWsProxy.xcodeproj
@@ -147,6 +147,25 @@ Needs Xcode and Rust with the `aarch64-apple-ios` target:
 ```
 
 The Rust core comes from [amurcanov/tg-ws-proxy-android](https://github.com/amurcanov/tg-ws-proxy-android) as a submodule and is pulled in automatically once a week by a separate workflow.
+
+---
+
+## Core settings and compatibility
+
+The core is synced with `amurcanov/tg-ws-proxy-android` (`540e588`). Settings include FakeTLS (a secret prefixed with `ee`), several CF domains and Workers separated by commas, CF over port 80, a pool from 0 to 16, and the buffer size. A zero pool turns off preconnections. The default stays WSS over port 443.
+
+Test DCs and PROXY protocol live in advanced settings. PROXY protocol needs a compatible intermediary; leave it off for a direct Telegram connection.
+
+The secret is kept from the first launch and changes only from the button in settings. The refreshed Workers list is stored permanently and passed into the VPN extension. The traffic chart can be turned off.
+
+For a Telegram fork, copy the connection link or enter the address, port, and full secret from settings by hand. For LiveContainer use the free build: the VPN extension does not load there, and background stability depends on the container and its permissions.
+
+Checks on a Mac:
+
+```sh
+./scripts/run-swift-regressions.sh
+./scripts/run-ffi-smoke.sh
+```
 
 ---
 

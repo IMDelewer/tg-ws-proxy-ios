@@ -44,7 +44,7 @@ Telegram → 127.0.0.1:1443 → Rust-ядро → WSS / Cloudflare → Telegram 
 
 ### 1. Скачайте файл
 
-Со [страницы релизов](https://github.com/reekeer/tg-ws-proxy-ios/releases/latest) — там же подробное сравнение:
+Со [страницы релизов](https://github.com/IMDelewer/tg-ws-proxy-ios/releases/latest) — там же подробное сравнение:
 
 | Файл | Кому |
 |------|------|
@@ -97,7 +97,7 @@ Telegram → 127.0.0.1:1443 → Rust-ядро → WSS / Cloudflare → Telegram 
 <summary><b>Xcode</b> — собрать и поставить самому, нужен Mac</summary>
 
 ```sh
-git clone --recurse-submodules https://github.com/reekeer/tg-ws-proxy-ios
+git clone --recurse-submodules https://github.com/IMDelewer/tg-ws-proxy-ios
 cd tg-ws-proxy-ios
 rustup target add aarch64-apple-ios
 open TgWsProxy.xcodeproj
