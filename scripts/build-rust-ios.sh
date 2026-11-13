@@ -78,7 +78,8 @@ for ARCHITECTURE in $(requested_architectures); do
     exit 1
   fi
 
-  CARGO_TARGET_DIR="$TARGET_DIR" RUSTC="$RUSTC_BIN" "$CARGO_BIN" rustc \
+  # Rust 1.100 rust-objcopy aborts (missing libLLVM) and then emits no archive.
+  CARGO_PROFILE_RELEASE_STRIP=none CARGO_TARGET_DIR="$TARGET_DIR" RUSTC="$RUSTC_BIN" "$CARGO_BIN" rustc \
     --manifest-path "$MANIFEST_PATH" \
     --target "$RUST_TARGET" \
     --release \
@@ -87,13 +88,18 @@ for ARCHITECTURE in $(requested_architectures); do
     -- \
     --crate-type=staticlib
 
-  LIBRARY_PATH="$TARGET_DIR/$RUST_TARGET/release/libtgwsproxy.a"
+  RELEASE_DIR="$TARGET_DIR/$RUST_TARGET/release"
+  LIBRARY_PATH="$RELEASE_DIR/libtgwsproxy.a"
   if [ ! -f "$LIBRARY_PATH" ]; then
-    LIBRARY_PATH="$TARGET_DIR/$RUST_TARGET/release/deps/libtgwsproxy.a"
+    LIBRARY_PATH="$RELEASE_DIR/deps/libtgwsproxy.a"
+  fi
+  if [ ! -f "$LIBRARY_PATH" ]; then
+    LIBRARY_PATH=$(find "$RELEASE_DIR" -type f -name 'libtgwsproxy*.a' 2>/dev/null | head -n 1 || true)
   fi
 
-  if [ ! -f "$LIBRARY_PATH" ]; then
+  if [ -z "$LIBRARY_PATH" ] || [ ! -f "$LIBRARY_PATH" ]; then
     echo "Cargo completed but libtgwsproxy.a was not found for $RUST_TARGET." >&2
+    find "$RELEASE_DIR" -type f -name 'libtgwsproxy*' >&2 || true
     exit 1
   fi
 
