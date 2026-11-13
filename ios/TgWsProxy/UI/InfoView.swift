@@ -44,9 +44,9 @@ struct InfoView: View {
         VStack(spacing: 0) {
             LinkRow(
                 title: "Репозиторий",
-                subtitle: "reekeer/tg-ws-proxy-ios",
+                subtitle: "IMDelewer/tg-ws-proxy-ios",
                 systemImage: "iphone",
-                url: "https://github.com/reekeer/tg-ws-proxy-ios"
+                url: "https://github.com/IMDelewer/tg-ws-proxy-ios"
             )
             Divider()
             LinkRow(

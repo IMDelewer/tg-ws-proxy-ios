@@ -68,6 +68,7 @@ struct ContentView: View {
         .tint(.tgAccent)
         .task {
             LogStore.shared.startCapturing()
+            await proxy.restore()
             let envStart = ProcessInfo.processInfo.environment["TGWS_AUTOSTART"] == "1"
             if (envStart || settings.autoStart), !proxy.isRunning {
                 proxy.start()
@@ -169,6 +170,7 @@ private struct FloatingNavMenu: View {
 }
 
 private struct HomeView: View {
+    @EnvironmentObject private var settings: AppSettings
     @EnvironmentObject private var proxy: ProxyViewModel
     @Environment(\.openURL) private var openURL
 
@@ -181,7 +183,9 @@ private struct HomeView: View {
                 }
                 statusCard
                 if proxy.isRunning {
-                    TrafficChartCard(samples: proxy.traffic)
+                    if settings.showTrafficChart {
+                        TrafficChartCard(samples: proxy.traffic)
+                    }
                 }
                 metricsCard
             }
@@ -193,7 +197,7 @@ private struct HomeView: View {
 
     private var hero: some View {
         VStack(spacing: 16) {
-            PowerButton(isOn: proxy.isRunning, isBusy: proxy.state == .starting) {
+            PowerButton(isOn: proxy.isRunning, isBusy: proxy.isTransitioning) {
                 Haptics.impact()
                 proxy.toggle()
             }
@@ -226,6 +230,9 @@ private struct HomeView: View {
         ) {
             MetricTile(title: "Получено", value: proxy.stats.downloaded, icon: "arrow.down")
             MetricTile(title: "Отправлено", value: proxy.stats.uploaded, icon: "arrow.up")
+            MetricTile(title: "Fronting", value: proxy.stats.fronting, icon: "network")
+            MetricTile(title: "CF pool", value: proxy.stats.cloudflarePool, icon: "cloud")
+            MetricTile(title: "WS pool", value: proxy.stats.pool, icon: "arrow.triangle.2.circlepath")
             MetricTile(
                 title: "Ошибки",
                 value: proxy.stats.errors,

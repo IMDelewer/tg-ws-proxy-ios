@@ -1,13 +1,12 @@
 {
   "sourceLanguage" : "ru",
   "strings" : {
-    "/с" : {
-      "extractionState" : "stale",
+    "%@ %lld" : {
       "localizations" : {
-        "en" : {
+        "ru" : {
           "stringUnit" : {
-            "state" : "translated",
-            "value" : "/s"
+            "state" : "new",
+            "value" : "%1$@ %2$lld"
           }
         }
       }
@@ -18,16 +17,6 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "%1$@ (%2$lld)"
-          }
-        }
-      }
-    },
-    "%@ %lld" : {
-      "localizations" : {
-        "ru" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "%1$@ %2$lld"
           }
         }
       }
@@ -54,11 +43,38 @@
         }
       }
     },
-    "127.0.0.1" : {
-
+    "/с" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "/s"
+          }
+        }
+      }
     },
-    "1443" : {
-
+    "127.0.0.1" : {},
+    "1443" : {},
+    "CF pool" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CF pool"
+          }
+        }
+      }
+    },
+    "CF через порт 80" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CF over port 80"
+          }
+        }
+      }
     },
     "Cloudflare" : {
       "extractionState" : "stale",
@@ -67,6 +83,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Cloudflare"
+          }
+        }
+      }
+    },
+    "Fronting" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fronting"
           }
         }
       }
@@ -93,6 +119,26 @@
         }
       }
     },
+    "PROXY protocol v1" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "PROXY protocol v1"
+          }
+        }
+      }
+    },
+    "PROXY protocol требует совместимого промежуточного клиента. Для прямого подключения Telegram оставьте выключенным." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "PROXY protocol requires a compatible intermediate client. Leave it off for direct Telegram connections."
+          }
+        }
+      }
+    },
     "Rust-ядро (Android-форк)" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -115,16 +161,13 @@
         }
       }
     },
-    "t" : {
-
-    },
-    "Telegram → localhost → WSS → Telegram DC" : {
+    "TG WS Proxy" : {
       "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Telegram → localhost → WSS → Telegram DC"
+            "value" : "TG WS Proxy"
           }
         }
       }
@@ -140,13 +183,13 @@
         }
       }
     },
-    "TG WS Proxy" : {
+    "Telegram → localhost → WSS → Telegram DC" : {
       "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TG WS Proxy"
+            "value" : "Telegram → localhost → WSS → Telegram DC"
           }
         }
       }
@@ -162,6 +205,16 @@
         }
       }
     },
+    "WS pool" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "WS pool"
+          }
+        }
+      }
+    },
     "WebSocket" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -173,6 +226,7 @@
         }
       }
     },
+    "t" : {},
     "Авто-переподключение" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -239,6 +293,26 @@
         }
       }
     },
+    "Буфер: %lld КБ" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Buffer: %lld KB"
+          }
+        }
+      }
+    },
+    "В форке Telegram укажите адрес, порт и secret из этих настроек вручную." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "In a Telegram fork, enter the address, port, and secret from these settings manually."
+          }
+        }
+      }
+    },
     "Вибрация" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -272,6 +346,16 @@
         }
       }
     },
+    "График трафика" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Traffic chart"
+          }
+        }
+      }
+    },
     "Графит" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -294,6 +378,16 @@
         }
       }
     },
+    "Домен FakeTLS (необязательно)" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "FakeTLS domain (optional)"
+          }
+        }
+      }
+    },
     "Домены CF Worker" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -311,6 +405,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Down"
+          }
+        }
+      }
+    },
+    "Закрываем соединения" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Closing connections"
           }
         }
       }
@@ -523,6 +627,16 @@
         }
       }
     },
+    "Не удалось обновить список. Сохранён предыдущий." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Could not refresh the list. The previous list was kept."
+          }
+        }
+      }
+    },
     "Нет доступа к кэшу приложения." : {
       "extractionState" : "stale",
       "localizations" : {
@@ -574,6 +688,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Original project"
+          }
+        }
+      }
+    },
+    "Остановка…" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stopping…"
           }
         }
       }
@@ -731,6 +855,16 @@
         }
       }
     },
+    "Порт 80 может помочь в мобильных сетях. Выключено: WSS через 443." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Port 80 may help on mobile networks. When off: WSS over 443."
+          }
+        }
+      }
+    },
     "Порт занят. Закройте другой прокси или смените порт в настройках." : {
       "extractionState" : "stale",
       "localizations" : {
@@ -841,6 +975,16 @@
         }
       }
     },
+    "Расширенные настройки" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Advanced settings"
+          }
+        }
+      }
+    },
     "Режим" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -907,6 +1051,26 @@
         }
       }
     },
+    "Свои CF-домены через запятую" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Custom CF domains, comma-separated"
+          }
+        }
+      }
+    },
+    "Свои Workers через запятую" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Custom Workers, comma-separated"
+          }
+        }
+      }
+    },
     "Свой домен (необязательно)" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -957,6 +1121,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "System"
+          }
+        }
+      }
+    },
+    "Скопировать ссылку подключения" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copy connection link"
           }
         }
       }
@@ -1012,6 +1186,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Theme"
+          }
+        }
+      }
+    },
+    "Тестовые DC" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Test DCs"
           }
         }
       }

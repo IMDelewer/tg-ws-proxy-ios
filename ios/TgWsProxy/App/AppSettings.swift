@@ -133,6 +133,7 @@ final class AppSettings: ObservableObject {
         }
     }
     @Published var accent: AccentChoice { didSet { Self.save(accent.rawValue, Self.accentKey) } }
+    @Published var showTrafficChart: Bool { didSet { Self.save(showTrafficChart, "app.showTrafficChart") } }
     @Published var autoStart: Bool { didSet { Self.save(autoStart, "app.autoStart") } }
     @Published var reconnect: Bool { didSet { Self.save(reconnect, "app.reconnect") } }
     @Published var notifications: Bool { didSet { Self.save(notifications, "app.notifications") } }
@@ -147,6 +148,7 @@ final class AppSettings: ObservableObject {
         theme = AppTheme(rawValue: d.string(forKey: Self.themeKey) ?? "") ?? .system
         language = AppLanguage(rawValue: d.string(forKey: "app.language") ?? "") ?? .system
         accent = AccentChoice(rawValue: d.string(forKey: Self.accentKey) ?? "") ?? .telegram
+        showTrafficChart = d.object(forKey: "app.showTrafficChart") as? Bool ?? true
         autoStart = d.object(forKey: "app.autoStart") as? Bool ?? false
         reconnect = d.object(forKey: "app.reconnect") as? Bool ?? true
         notifications = d.object(forKey: "app.notifications") as? Bool ?? false
