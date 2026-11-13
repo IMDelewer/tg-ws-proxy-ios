@@ -150,25 +150,6 @@ The Rust core comes from [amurcanov/tg-ws-proxy-android](https://github.com/amur
 
 ---
 
-## Core settings and compatibility
-
-The core is synced with `amurcanov/tg-ws-proxy-android` (`540e588`). Settings include FakeTLS (a secret prefixed with `ee`), several CF domains and Workers separated by commas, CF over port 80, a pool from 0 to 16, and the buffer size. A zero pool turns off preconnections. The default stays WSS over port 443.
-
-Test DCs and PROXY protocol live in advanced settings. PROXY protocol needs a compatible intermediary; leave it off for a direct Telegram connection.
-
-The secret is kept from the first launch and changes only from the button in settings. The refreshed Workers list is stored permanently and passed into the VPN extension. The traffic chart can be turned off.
-
-For a Telegram fork, copy the connection link or enter the address, port, and full secret from settings by hand. For LiveContainer use the free build: the VPN extension does not load there, and background stability depends on the container and its permissions.
-
-Checks on a Mac:
-
-```sh
-./scripts/run-swift-regressions.sh
-./scripts/run-ffi-smoke.sh
-```
-
----
-
 ## 🧬 Origins and credits
 
 - [Flowseal/tg-ws-proxy](https://github.com/Flowseal/tg-ws-proxy) — the original idea of bypassing restrictions over WebSocket and the first version of the core.
