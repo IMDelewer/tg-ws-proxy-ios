@@ -18,30 +18,23 @@ git -C "$VENDOR_DIR" fetch --depth 1 origin "$UPSTREAM_REF"
 git -C "$VENDOR_DIR" checkout --detach FETCH_HEAD
 COMMIT="$(git -C "$VENDOR_DIR" rev-parse HEAD)"
 
-rm -rf "$DEST/src"
-mkdir -p "$DEST/src"
-cp "$VENDOR_DIR/Cargo.toml" "$DEST/Cargo.toml"
-cp "$VENDOR_DIR/Cargo.lock" "$DEST/Cargo.lock"
-cp "$VENDOR_DIR/src/"*.rs "$DEST/src/"
+# Validate the entire adapter before touching the working Rust sources.
+STAGE="$(mktemp -d "${TMPDIR:-/tmp}/tgws-sync.XXXXXX")"
+trap 'rm -rf "$STAGE"' EXIT HUP INT TERM
+mkdir -p "$STAGE/src"
+cp "$VENDOR_DIR/Cargo.toml" "$STAGE/Cargo.toml"
+cp "$VENDOR_DIR/Cargo.lock" "$STAGE/Cargo.lock"
+cp "$VENDOR_DIR/src/"*.rs "$STAGE/src/"
 
-# Патч намеренно минимальный: только функциональные отличия iOS-сборки от
-# апстрима. Сначала строгое наложение, затем с допуском по контексту.
-apply_ios_patch() {
-  if git apply --directory=src-wrapper "$PATCH" 2>/dev/null; then
-    return 0
-  fi
-  if patch -p1 -d "$DEST" --forward --fuzz=3 --dry-run < "$PATCH" >/dev/null 2>&1; then
-    patch -p1 -d "$DEST" --forward --fuzz=3 < "$PATCH"
-    return 0
-  fi
-  return 1
-}
-
-if ! apply_ios_patch; then
-  echo "iOS FFI patch does not apply to upstream $COMMIT." >&2
-  echo "Update $PATCH and rerun." >&2
+if ! patch --batch -p1 -d "$STAGE" --forward --fuzz=0 --dry-run < "$PATCH"; then
+  echo "iOS FFI patch does not apply to upstream $COMMIT. Sources were not changed." >&2
   exit 1
 fi
+patch --batch -p1 -d "$STAGE" --forward --fuzz=0 < "$PATCH"
+mkdir -p "$DEST/src"
+cp "$STAGE/Cargo.toml" "$DEST/Cargo.toml"
+cp "$STAGE/Cargo.lock" "$DEST/Cargo.lock"
+cp "$STAGE/src/"*.rs "$DEST/src/"
 
 printf '%s\n' "$COMMIT" > "$DEST/UPSTREAM_COMMIT"
 printf '%s\n' "$UPSTREAM_URL" > "$DEST/UPSTREAM_URL"

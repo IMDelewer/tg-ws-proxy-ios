@@ -73,6 +73,10 @@ pub fn merge_cfproxy_domains(lists: &[Vec<String>]) -> Vec<String> {
             if d.is_empty() || seen.contains(&d) {
                 continue;
             }
+            // Дополнительно валидируем как в _normalize_domain_pool оригинала.
+            if !crate::config::is_valid_domain(&d) {
+                continue;
+            }
             seen.insert(d.clone());
             merged.push(d);
         }
@@ -226,7 +230,10 @@ fn load_cfproxy_domains_from_cache() -> Vec<String> {
 
 
 
+static CACHE_WRITE_LOCK: Lazy<parking_lot::Mutex<()>> = Lazy::new(|| parking_lot::Mutex::new(()));
+
 fn save_cfproxy_domains_to_cache(domains: &[String]) {
+    let _guard = CACHE_WRITE_LOCK.lock();
     let path = match cfproxy_cache_path() {
         Some(p) => p,
         None => return,
@@ -241,7 +248,8 @@ fn save_cfproxy_domains_to_cache(domains: &[String]) {
         }
     }
     let data = domains.join("\n");
-    if let Err(e) = std::fs::write(&path, data) {
+    let temporary = path.with_extension("tmp");
+    if let Err(e) = std::fs::write(&temporary, data).and_then(|_| std::fs::rename(&temporary, &path)) {
         ldebug!(" CF: кеш сохранить не удалось: {}", e);
     }
 }
@@ -269,6 +277,15 @@ fn should_refresh_cfproxy_domains() -> bool {
 
 
 
+pub fn seed_cfproxy_domains(domains: Vec<String>) {
+    let cached = load_cfproxy_domains_from_cache();
+    let merged = merge_cfproxy_domains(&[domains, cached.clone()]);
+    if merged != cached {
+        save_cfproxy_domains_to_cache(&merged);
+    }
+    init_cfproxy_domains();
+}
+
 pub fn init_cfproxy_domains() {
     let defaults = default_cfproxy_domains();
     let cached = load_cfproxy_domains_from_cache();
@@ -276,7 +293,7 @@ pub fn init_cfproxy_domains() {
     let mut cfg = CFPROXY.write();
     if !cfg.user_domain.is_empty() {
         let ud = cfg.user_domain.clone();
-        cfg.domains = vec![ud.clone()];
+        cfg.domains = crate::config::coerce_domain_list_str(&ud);
         crate::balancer::BALANCER.write().update_domains_list(&cfg.domains);
         return;
     }
@@ -293,19 +310,34 @@ pub fn init_cfproxy_domains() {
     }
 }
 
-pub fn start_cfproxy_refresh() {
+pub fn start_cfproxy_refresh(cancel: tokio_util::sync::CancellationToken) {
+    // Порт proxy/config.py::start_cfproxy_domain_refresh: сначала пробуем
+    // обновить сразу (до 3 попыток), затем раз в час фоновым таском.
+    // На мобиле уважаем свежесть дискового кеша для первой попытки.
     if !should_refresh_cfproxy_domains() {
-        ldebug!(" CF: кеш свежий, пропускаю обновление списка");
-        return;
+        ldebug!(" CF: кеш свежий, откладываю обновление списка на час");
     }
     tokio::spawn(async move {
-        for _ in 0..3 {
-            if try_refresh_cfproxy_domains().await {
-                return;
+        tokio::select! {
+        _ = cancel.cancelled() => {},
+        _ = async {
+        if should_refresh_cfproxy_domains() {
+            for _ in 0..3 {
+                if try_refresh_cfproxy_domains().await {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_secs(10)).await;
             }
-            tokio::time::sleep(Duration::from_secs(10)).await;
+            if CFPROXY.read().domains.is_empty() {
+                ldebug!(" CF: обновить список доменов не удалось, остаюсь на кеше/встроенном списке");
+            }
         }
-        ldebug!(" CF: обновить список доменов не удалось, остаюсь на кеше/встроенном списке");
+        loop {
+            tokio::time::sleep(CFPROXY_REFRESH_INTERVAL).await;
+            try_refresh_cfproxy_domains().await;
+        }
+        } => {}
+        }
     });
 }
 
@@ -323,9 +355,18 @@ pub async fn try_refresh_cfproxy_domains() -> bool {
         Err(_) => return false,
     };
 
+    // Cache-buster как в оригинале ("?" + 7 случайных букв), UA tg-ws-proxy.
+    let nonce: String = {
+        use rand::Rng;
+        let mut rng = rand::thread_rng();
+        (0..7)
+            .map(|_| rng.gen_range(b'a'..=b'z') as char)
+            .collect()
+    };
+    let url = format!("{}?{}", CFPROXY_DOMAINS_URL, nonce);
     let resp = match client
-        .get(CFPROXY_DOMAINS_URL)
-        .header("User-Agent", "Mozilla/5.0 tg-ws-proxy-android")
+        .get(&url)
+        .header("User-Agent", "tg-ws-proxy")
         .send()
         .await
     {
@@ -347,20 +388,21 @@ pub async fn try_refresh_cfproxy_domains() -> bool {
         }
     };
 
-    let mut new_domains = Vec::new();
+    let mut fetched_raw = Vec::new();
     for line in body.lines() {
         let line = line.trim();
         if line.is_empty() || line.starts_with('#') {
             continue;
         }
-        let d = normalize_cf_domain(line);
-        if !d.is_empty() {
-            new_domains.push(d);
-        }
+        fetched_raw.push(line.to_string());
     }
 
-    if !new_domains.is_empty() {
-        let merged = merge_cfproxy_domains(&[new_domains.clone(), default_cfproxy_domains()]);
+    // Валидация пула как в оригинале: минимум CFPROXY_MIN_VALID_DOMAINS
+    // валидных доменов, иначе игнорируем payload и остаёмся на текущем пуле.
+    let decoded: Vec<String> = fetched_raw.iter().map(|d| normalize_cf_domain(d)).collect();
+    let pool = normalize_domain_pool(&decoded);
+    if pool.len() >= CFPROXY_MIN_VALID_DOMAINS {
+        let merged = merge_cfproxy_domains(&[pool.clone(), default_cfproxy_domains()]);
         {
             let mut cfg = CFPROXY.write();
             if !cfg.user_domain.is_empty() {
@@ -370,8 +412,19 @@ pub async fn try_refresh_cfproxy_domains() -> bool {
         }
         crate::balancer::BALANCER.write().update_domains_list(&merged);
         save_cfproxy_domains_to_cache(&merged);
-        linfo!(" CF: список доменов обновлен ({} шт.)", new_domains.len());
+        linfo!(" CF: список доменов обновлен ({} шт.)", pool.len());
         return true;
+    }
+
+    if !fetched_raw.is_empty() {
+        lwarn!(
+            " CF: игнорирую список доменов (total={}, valid={}, need>={}); остаюсь на текущем пуле",
+            fetched_raw.len(),
+            pool.len(),
+            CFPROXY_MIN_VALID_DOMAINS
+        );
+    } else {
+        ldebug!(" CF: обновить список доменов не удалось (пустой ответ), остаюсь на кеше/встроенном списке");
     }
     false
 }

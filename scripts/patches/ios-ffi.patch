@@ -1,75 +1,341 @@
---- a/src/balancer.rs
-+++ b/src/balancer.rs
-@@ -31,8 +31,15 @@
-         self.domains = domains_list.to_vec();
-         let mut rng = rand::thread_rng();
- 
--        self.dc_to_domain.clear();
-+        let new_set: std::collections::HashSet<&str> =
-+            self.domains.iter().map(|s| s.as_str()).collect();
-+
-+        self.dc_to_domain
-+            .retain(|_, domain| new_set.contains(domain.as_str()));
-         for dc_id in [1, 2, 3, 4, 5, 203] {
-+            if self.dc_to_domain.contains_key(&dc_id) {
-+                continue;
-+            }
-             if let Some(domain) = self.domains.choose(&mut rng) {
-                 self.dc_to_domain.insert(dc_id, domain.clone());
-             }
 --- a/src/lib.rs
 +++ b/src/lib.rs
-@@ -160,7 +160,7 @@
+@@ -74,6 +74,9 @@
+     }
+
+     let host = cstr_to_string(c_host);
++    if !(1..=65535).contains(&port) {
++        return -2;
++    }
+     let go_port = port as u16;
+     let dc_ips_str = cstr_to_string(c_dc_ips);
+     let secret_str = cstr_to_string(c_secret);
+@@ -82,11 +85,10 @@
+     init_logging(is_verbose);
+     cfproxy::clear_cfproxy_429_cooldowns();
+
+-    if secret_str.len() == 32 {
+-        if hex::decode(&secret_str).is_ok() {
+-            *PROXY_SECRET.write() = secret_str.clone();
+-        }
+-    }
++    if secret_str.len() != 32 || hex::decode(&secret_str).is_err() {
++        return -2;
++    }
++    *PROXY_SECRET.write() = secret_str;
+
+     cfproxy::init_cfproxy_domains();
+
+@@ -160,10 +162,13 @@
+
      let rt = runtime();
-     let pool = state.pool.clone();
-     let handle = state.handle;
--    rt.block_on(async move {
-+    rt.spawn(async move {
+     let pools = state.pools.clone();
+-    let handle = state.handle;
++    let mut handle = state.handle;
+     rt.block_on(async move {
          linfo!("StopProxy: waiting for proxy tasks to finish (max 2s)");
-         let _ = tokio::time::timeout(std::time::Duration::from_secs(2), handle).await;
+-        let _ = tokio::time::timeout(std::time::Duration::from_secs(2), handle).await;
++        if tokio::time::timeout(std::time::Duration::from_secs(2), &mut handle).await.is_err() {
++            handle.abort();
++            let _ = handle.await;
++        }
          linfo!("StopProxy: closing pool connections");
-@@ -179,13 +179,12 @@
- 
+         pools.close_all().await;
+         pools.reset().await;
+@@ -290,7 +295,8 @@
+
  #[unsafe(no_mangle)]
- pub extern "C" fn SetPoolSize(size: c_int) {
--    let mut n = size;
--    if n < 2 {
--        n = 2;
--    }
--    if n > 16 {
--        n = 16;
--    }
-+    let n = match size {
-+        2 | 4 | 6 => size,
-+        n if n < 3 => 2,
-+        n if n < 6 => 4,
-+        _ => 6,
-+    };
-     POOL_SIZE.store(n, Ordering::Relaxed);
+ pub extern "C" fn GetStats() -> *mut c_char {
+-    let s = STATS.summary();
++    let s = format!("{} up_bytes={} down_bytes={}", STATS.summary(),
++        STATS.bytes_up.load(Ordering::Relaxed), STATS.bytes_down.load(Ordering::Relaxed));
+     CString::new(s).unwrap_or_default().into_raw()
  }
- 
-@@ -241,6 +240,24 @@
-     CString::new(format!("dd{}", sec)).unwrap_or_default().into_raw()
+
+@@ -307,6 +313,27 @@
+     CString::new(full).unwrap_or_default().into_raw()
  }
- 
+
 +#[unsafe(no_mangle)]
 +pub extern "C" fn GetCfProxyDomains() -> *mut c_char {
 +    if CFPROXY.read().domains.is_empty() {
 +        cfproxy::init_cfproxy_domains();
 +    }
-+    let domains = CFPROXY.read().domains.join("\n");
-+    CString::new(domains).unwrap_or_default().into_raw()
++    CString::new(CFPROXY.read().domains.join("\n")).unwrap_or_default().into_raw()
++}
++
++/// # Safety
++/// `c_domains` must be a valid C string or null.
++#[unsafe(no_mangle)]
++pub unsafe extern "C" fn SetCfProxyDomains(c_domains: *const c_char) {
++    let raw = cstr_to_string(c_domains);
++    cfproxy::seed_cfproxy_domains(raw.lines().map(str::to_owned).collect());
 +}
 +
 +#[unsafe(no_mangle)]
 +pub extern "C" fn RefreshCfProxyDomains() -> c_int {
-+    if runtime().block_on(cfproxy::try_refresh_cfproxy_domains()) {
-+        1
-+    } else {
-+        0
-+    }
++    if runtime().block_on(cfproxy::try_refresh_cfproxy_domains()) { 1 } else { 0 }
 +}
 +
  /// # Safety
  /// `p` должен быть указателем, ранее возвращённым из этой библиотеки.
  #[unsafe(no_mangle)]
+--- a/src/cfproxy.rs
++++ b/src/cfproxy.rs
+@@ -230,7 +230,10 @@
+
+
+
++static CACHE_WRITE_LOCK: Lazy<parking_lot::Mutex<()>> = Lazy::new(|| parking_lot::Mutex::new(()));
++
+ fn save_cfproxy_domains_to_cache(domains: &[String]) {
++    let _guard = CACHE_WRITE_LOCK.lock();
+     let path = match cfproxy_cache_path() {
+         Some(p) => p,
+         None => return,
+@@ -245,7 +248,8 @@
+         }
+     }
+     let data = domains.join("\n");
+-    if let Err(e) = std::fs::write(&path, data) {
++    let temporary = path.with_extension("tmp");
++    if let Err(e) = std::fs::write(&temporary, data).and_then(|_| std::fs::rename(&temporary, &path)) {
+         ldebug!(" CF: кеш сохранить не удалось: {}", e);
+     }
+ }
+@@ -273,6 +277,15 @@
+
+
+
++pub fn seed_cfproxy_domains(domains: Vec<String>) {
++    let cached = load_cfproxy_domains_from_cache();
++    let merged = merge_cfproxy_domains(&[domains, cached.clone()]);
++    if merged != cached {
++        save_cfproxy_domains_to_cache(&merged);
++    }
++    init_cfproxy_domains();
++}
++
+ pub fn init_cfproxy_domains() {
+     let defaults = default_cfproxy_domains();
+     let cached = load_cfproxy_domains_from_cache();
+@@ -280,7 +293,7 @@
+     let mut cfg = CFPROXY.write();
+     if !cfg.user_domain.is_empty() {
+         let ud = cfg.user_domain.clone();
+-        cfg.domains = vec![ud.clone()];
++        cfg.domains = crate::config::coerce_domain_list_str(&ud);
+         crate::balancer::BALANCER.write().update_domains_list(&cfg.domains);
+         return;
+     }
+@@ -297,7 +310,7 @@
+     }
+ }
+
+-pub fn start_cfproxy_refresh() {
++pub fn start_cfproxy_refresh(cancel: tokio_util::sync::CancellationToken) {
+     // Порт proxy/config.py::start_cfproxy_domain_refresh: сначала пробуем
+     // обновить сразу (до 3 попыток), затем раз в час фоновым таском.
+     // На мобиле уважаем свежесть дискового кеша для первой попытки.
+@@ -305,6 +318,9 @@
+         ldebug!(" CF: кеш свежий, откладываю обновление списка на час");
+     }
+     tokio::spawn(async move {
++        tokio::select! {
++        _ = cancel.cancelled() => {},
++        _ = async {
+         if should_refresh_cfproxy_domains() {
+             for _ in 0..3 {
+                 if try_refresh_cfproxy_domains().await {
+@@ -319,6 +335,8 @@
+         loop {
+             tokio::time::sleep(CFPROXY_REFRESH_INTERVAL).await;
+             try_refresh_cfproxy_domains().await;
++        }
++        } => {}
+         }
+     });
+ }
+--- a/src/proxy.rs
++++ b/src/proxy.rs
+@@ -571,26 +571,15 @@
+                     e.worker_domain,
+                     now - e.created
+                 );
+-                self.schedule_refill(dc, fallback_dst, worker_domains).await;
++                self.refill_now(dc, fallback_dst, worker_domains).await;
+                 Some((e.ws, e.worker_domain))
+             }
+             None => {
+                 STATS.cf_pool_misses.fetch_add(1, Ordering::Relaxed);
++                self.refill_now(dc, fallback_dst, worker_domains).await;
+                 None
+             }
+         }
+-    }
+-
+-    async fn schedule_refill(&self, dc: i32, fallback_dst: String, worker_domains: Vec<String>) {
+-        {
+-            let mut r = self.refilling.lock().await;
+-            if r.contains(&dc) {
+-                return;
+-            }
+-            r.insert(dc);
+-        }
+-        // PER_DC_LIMIT уважаем через проверку размера в refill.
+-        let _ = (fallback_dst, worker_domains);
+     }
+
+     pub async fn refill_now(
+@@ -599,43 +588,34 @@
+         fallback_dst: String,
+         worker_domains: Vec<String>,
+     ) {
+-        let should = {
+-            let mut r = self.refilling.lock().await;
+-            if r.contains(&dc) {
+-                false
+-            } else {
+-                r.insert(dc);
+-                true
+-            }
+-        };
+-        if !should {
++        if self.cancel_token.is_cancelled() || POOL_SIZE.load(Ordering::Relaxed) <= 0 {
+             return;
+         }
++        {
++            let mut refilling = self.refilling.lock().await;
++            if !refilling.insert(dc) { return; }
++        }
+         let pool = self.clone();
+-        let cancel = self.cancel_token.clone();
+         tokio::spawn(async move {
+-            let _cancel = cancel;
+-            {
+-                let map = pool.idle.lock().await;
+-                let cur = map.get(&dc).map(|b| b.len()).unwrap_or(0);
+-                if cur >= CF_WORKER_PER_DC_LIMIT.min(POOL_SIZE.load(Ordering::Relaxed).max(0) as usize) {
+-                    pool.refilling.lock().await.remove(&dc);
+-                    return;
+-                }
+-            }
+-            if let Some((ws, domain)) = pool
+-                .connect_one(worker_domains.clone(), fallback_dst.clone(), dc)
+-                .await
+-            {
+-                let mut map = pool.idle.lock().await;
+-                map.entry(dc)
+-                    .or_insert_with(VecDeque::new)
+-                    .push_back(CfWorkerEntry {
++            let connection = tokio::select! {
++                _ = pool.cancel_token.cancelled() => None,
++                result = async {
++                    let current = pool.idle.lock().await.get(&dc).map_or(0, VecDeque::len);
++                    if current >= CF_WORKER_PER_DC_LIMIT { return None; }
++                    pool.connect_one(worker_domains, fallback_dst, dc).await
++                } => result,
++            };
++            if let Some((ws, domain)) = connection {
++                if pool.cancel_token.is_cancelled() {
++                    ws.close().await;
++                } else {
++                    pool.idle.lock().await.entry(dc).or_default().push_back(CfWorkerEntry {
+                         ws,
+                         created: now_monotonic(),
+                         worker_domain: domain,
+                     });
+-                ldebug!("CF worker pool refilled DC{}: ready", dc);
++                    ldebug!("CF worker pool refilled DC{}: ready", dc);
++                }
+             }
+             pool.refilling.lock().await.remove(&dc);
+         });
+@@ -664,7 +644,7 @@
+     }
+
+     pub async fn available_domains(&self, worker_domains: Vec<String>) -> Vec<String> {
+-        let now = now_unix_f64();
++        let now = now_monotonic();
+         let mut exhausted = self.exhausted_until.lock().await;
+         let mut domains = Vec::new();
+         let mut seen = HashSet::new();
+@@ -690,9 +670,12 @@
+         domains
+     }
+
+-    pub async fn report_failure(&self, _worker_domain: &str, _exc: &WsError) {
+-        // TODO: picks up 429/daily-limit handling — как в оригинале пока no-op.
+-        return;
++    pub async fn report_failure(&self, worker_domain: &str, exc: &WsError) {
++        if !is_http_status_error(exc, 429) { return; }
++        let retry_after = retry_after_delay(exc);
++        let delay = if retry_after.is_zero() { CFPROXY_429_COOLDOWN } else { retry_after };
++        let until = now_monotonic() + delay.as_secs_f64().min(86400.0);
++        self.exhausted_until.lock().await.insert(worker_domain.to_owned(), until);
+     }
+
+     pub async fn warmup(self: &Arc<Self>, dc_opt_map: &HashMap<i32, String>) {
+@@ -2134,7 +2117,7 @@
+         *m = dc_opt_map.clone();
+     }
+
+-    start_cfproxy_refresh();
++    start_cfproxy_refresh(cancel_root.clone());
+
+     {
+         let p = pools.clone();
+@@ -2235,3 +2218,38 @@
+     }
+     result
+ }
++
++#[cfg(test)]
++mod ios_worker_tests {
++    use super::*;
++
++    #[tokio::test]
++    async fn worker_rate_limit_is_respected_and_expires() {
++        let pool = CfWorkerPool::new(CancellationToken::new());
++        let domain = "worker.example.com".to_string();
++        let error = WsError::Handshake(WsHandshakeError {
++            status_code: 429,
++            status_line: "HTTP/1.1 429 Too Many Requests".to_string(),
++            headers: [("retry-after".to_string(), "60".to_string())].into_iter().collect(),
++            location: String::new(),
++        });
++        pool.report_failure(&domain, &error).await;
++        assert!(pool.available_domains(vec![domain.clone()]).await.is_empty());
++        let until = pool.exhausted_until.lock().await[&domain];
++        assert!(until > now_monotonic() + 50.0);
++        pool.exhausted_until.lock().await.insert(domain.clone(), now_monotonic() - 1.0);
++        assert_eq!(pool.available_domains(vec![domain.clone()]).await, vec![domain.clone()]);
++        pool.report_failure(&domain, &WsError::Timeout).await;
++        assert_eq!(pool.available_domains(vec![domain.clone()]).await, vec![domain]);
++    }
++
++    #[tokio::test]
++    async fn cancelled_worker_pool_does_not_schedule_connections() {
++        let cancel = CancellationToken::new();
++        cancel.cancel();
++        let pool = Arc::new(CfWorkerPool::new(cancel));
++        pool.refill_now(2, "127.0.0.1".to_string(), vec!["worker.example.com".to_string()]).await;
++        assert!(pool.refilling.lock().await.is_empty());
++        assert!(pool.idle.lock().await.is_empty());
++    }
++}
+--- a/src/balancer.rs
++++ b/src/balancer.rs
+@@ -38,8 +38,11 @@
+         self.domains = domains_list.to_vec();
+         let mut rng = rand::thread_rng();
+
+-        self.dc_to_domain.clear();
++        let new_set: std::collections::HashSet<&str> =
++            self.domains.iter().map(|s| s.as_str()).collect();
++        self.dc_to_domain.retain(|_, domain| new_set.contains(domain.as_str()));
+         for dc_id in [1, 2, 3, 4, 5, 203] {
++            if self.dc_to_domain.contains_key(&dc_id) { continue; }
+             if let Some(domain) = self.domains.choose(&mut rng) {
+                 self.dc_to_domain.insert(dc_id, domain.clone());
+             }

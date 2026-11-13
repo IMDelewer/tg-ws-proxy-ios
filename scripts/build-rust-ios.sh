@@ -3,7 +3,7 @@ set -eu
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 MANIFEST_PATH="$ROOT_DIR/src-wrapper/Cargo.toml"
-TARGET_DIR="${DERIVED_FILE_DIR:-$ROOT_DIR/.build}/rust-target"
+TARGET_DIR="${TGWS_RUST_TARGET_DIR:-${DERIVED_FILE_DIR:-$ROOT_DIR/.build}/rust-target}"
 OUTPUT_DIR="${BUILT_PRODUCTS_DIR:-$ROOT_DIR/.build}/rust"
 
 export PATH="$HOME/.cargo/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"

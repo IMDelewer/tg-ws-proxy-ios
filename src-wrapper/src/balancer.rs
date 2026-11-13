@@ -3,6 +3,7 @@ use parking_lot::RwLock;
 use rand::seq::SliceRandom;
 use std::collections::HashMap;
 
+// Порт proxy/balancer.py::_Balancer.
 pub struct Balancer {
     domains: Vec<String>,
     dc_to_domain: HashMap<i32, String>,
@@ -19,6 +20,8 @@ impl Balancer {
     }
 
     pub fn update_domains_list(&mut self, domains_list: &[String]) {
+        // Оригинал: if Counter(self.domains) == Counter(domains_list): return.
+        // Отсортированное сравнение эквивалентно сравнению мультимножеств.
         let mut current_sorted = self.domains.clone();
         current_sorted.sort();
         let mut new_sorted = domains_list.to_vec();
@@ -28,18 +31,18 @@ impl Balancer {
             return;
         }
 
+        if domains_list.is_empty() {
+            return;
+        }
+
         self.domains = domains_list.to_vec();
         let mut rng = rand::thread_rng();
 
         let new_set: std::collections::HashSet<&str> =
             self.domains.iter().map(|s| s.as_str()).collect();
-
-        self.dc_to_domain
-            .retain(|_, domain| new_set.contains(domain.as_str()));
+        self.dc_to_domain.retain(|_, domain| new_set.contains(domain.as_str()));
         for dc_id in [1, 2, 3, 4, 5, 203] {
-            if self.dc_to_domain.contains_key(&dc_id) {
-                continue;
-            }
+            if self.dc_to_domain.contains_key(&dc_id) { continue; }
             if let Some(domain) = self.domains.choose(&mut rng) {
                 self.dc_to_domain.insert(dc_id, domain.clone());
             }
@@ -57,7 +60,7 @@ impl Balancer {
     pub fn get_domains_for_dc(&self, dc_id: i32) -> Vec<String> {
         let mut result = Vec::new();
         let current_domain = self.dc_to_domain.get(&dc_id).cloned();
-        
+
         if let Some(ref d) = current_domain {
             result.push(d.clone());
         }
@@ -71,7 +74,7 @@ impl Balancer {
                 result.push(d);
             }
         }
-        
+
         result
     }
 }
