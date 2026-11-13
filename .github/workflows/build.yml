@@ -27,6 +27,9 @@ jobs:
 
       # Сборку под aarch64-apple-ios проверяет job app: xcodebuild собирает
       # ядро через build-rust-ios.sh, для этого нужен iOS SDK и macOS-раннер.
+      - name: Core regression tests
+        run: cargo test --manifest-path src-wrapper/Cargo.toml --locked --lib
+
       - name: FFI smoke test
         run: ./scripts/run-ffi-smoke.sh
 
@@ -51,6 +54,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-apple-ios
+
+      - name: Swift regression tests
+        run: ./scripts/run-swift-regressions.sh
 
       - name: Build IPA
         run: ./build.sh ${{ matrix.flags }}

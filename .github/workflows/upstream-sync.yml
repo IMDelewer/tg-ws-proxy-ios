@@ -37,6 +37,9 @@ jobs:
       - name: Check Rust core for iOS
         run: cargo check --manifest-path src-wrapper/Cargo.toml --locked --target aarch64-apple-ios
 
+      - name: Core regression tests
+        run: cargo test --manifest-path src-wrapper/Cargo.toml --locked --lib
+
       - name: FFI smoke test
         run: ./scripts/run-ffi-smoke.sh
 
