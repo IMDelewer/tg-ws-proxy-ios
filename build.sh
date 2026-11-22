@@ -178,10 +178,21 @@ for devices in d["devices"].values():
   fi
 else
   mkdir -p "$OUTPUT_DIR"
-  STAGE="$OUTPUT_DIR/.stage-$NAME"
-  rm -rf "$STAGE"
+  STAGE="$(mktemp -d "${TMPDIR:-/tmp}/tgwsproxy-$NAME.XXXXXX")"
   mkdir -p "$STAGE/Payload"
-  cp -R "$APP" "$STAGE/Payload/"
+  COPYFILE_DISABLE=1 cp -R "$APP" "$STAGE/Payload/"
+  PACKAGE_APP="$STAGE/Payload/TgWsProxy.app"
+  if [ "$WITH_VPN" -eq 1 ]; then
+    echo ">>> Ad-hoc signing VPN entitlements for TrollStore"
+    /usr/bin/xattr -cr "$PACKAGE_APP"
+    /usr/bin/codesign --force --sign - --generate-entitlement-der \
+      --entitlements ios/PacketTunnel/PacketTunnel.entitlements \
+      "$PACKAGE_APP/PlugIns/PacketTunnel.appex"
+    /usr/bin/codesign --force --sign - --generate-entitlement-der \
+      --entitlements "$ENTITLEMENTS" \
+      "$PACKAGE_APP"
+    /usr/bin/codesign --verify --deep --strict "$PACKAGE_APP"
+  fi
   if [ "$WITH_VPN" -eq 1 ]; then
     IPA="$OUTPUT_DIR/TgWsProxy-vpn.ipa"
   else
